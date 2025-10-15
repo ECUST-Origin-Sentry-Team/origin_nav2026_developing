@@ -1,0 +1,3 @@
+string enemy_id
+---
+bool attack_available

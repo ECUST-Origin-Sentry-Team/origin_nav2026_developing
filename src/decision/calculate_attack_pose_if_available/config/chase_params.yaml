@@ -1,0 +1,8 @@
+/calculate_attack_pose_if_available:
+  ros__parameters:
+    base_link_frame_id : base_link
+    attack_radius: 3.0
+    num_sectors : 15
+    cost_threshold : 20
+    max_chase_distance: 8.0
+    chase_visualize : true
