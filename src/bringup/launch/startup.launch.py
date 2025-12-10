@@ -62,11 +62,13 @@ def generate_launch_description():
         )
     )
 
-    fastlio = IncludeLaunchDescription(
+
+    ada_lio = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            get_package_share_directory('fast_lio')+"/launch/mapping.launch.py"
+            get_package_share_directory('adaptive_lio')+"/launch/run.launch.py"
         )
     )
+
 
     point_lio_rviz = Node(
         package="rviz2",
@@ -136,8 +138,8 @@ def generate_launch_description():
             ComposableNode(
                 package='nav2_map_server',
                 plugin='nav2_map_server::MapServer',
-                parameters=[{'yaml_filename': os.path.join(bringup_dir, 'map', '601_left.yaml')}],
-                # parameters=[{'yaml_filename': os.path.join(bringup_dir, 'map', '6floor_mid.yaml')}],
+                parameters=[{'yaml_filename': os.path.join(bringup_dir, 'map', '601.yaml')}],
+                # parameters=[{'yaml_filename': os.path.join(bringup_dir, 'map', '601_left_11_7.yaml')}],
                 # parameters=[{'yaml_filename': os.path.join(bringup_dir, 'map', 'blank.yaml')}],
                 # parameters=[{'yaml_filename': os.path.join(bringup_dir, 'map', 'rmuc_2025_normalized.yaml')}],
                 name='map_server',),
@@ -201,7 +203,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             get_package_share_directory('rm_serial')+"/launch/rm_serial.launch.py"
         ),
-        launch_arguments={'use_fake_referee': use_fake_referee}.items()
+        launch_arguments={'use_fake_referee': use_fake_referee , 'self_color' : self_color}.items()
     )
 
     icp = IncludeLaunchDescription(
@@ -230,9 +232,11 @@ def generate_launch_description():
             self_color_yaml_cmd ,
             modify,
             # icp,
+            # gicp,
             rm_serial,
-            #  pointlio,
-            fastlio ,
+            # pointlio,
+            ada_lio,
+            # fastlio ,
             livox_ros_driver2,
             container,
             referee_fake,
@@ -244,10 +248,10 @@ def generate_launch_description():
             fake_baselink,
             dp_a, 
             # TimerAction(period=4.0, actions=[icp]),
-            # TimerAction(period=4.0, actions=[nav2]),
+            TimerAction(period=4.0, actions=[nav2]),
             # TimerAction(period=4.0, actions=[dec]),
-            # TimerAction(period=8.0, actions=[dec_simple]),
-            TimerAction(period=8.0, actions=[calculatepose]),
+            TimerAction(period=8.0, actions=[dec_simple]),
+            # TimerAction(period=8.0, actions=[calculatepose]),
 
 
             

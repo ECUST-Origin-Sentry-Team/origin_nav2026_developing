@@ -2,16 +2,12 @@ import struct
 import serial
 import time
 import rclpy
-import rclpy.duration
-from rclpy.node import Node, Publisher
+from rclpy.node import Node
 from rm_interfaces.msg import GimbalCmd
-import rclpy.publisher
-from std_msgs.msg import String,Bool,Float32,Int32
-import tf_transformations
-from math import pi
+from rm_interfaces.msg import Gimbal
+from std_msgs.msg import Bool,Float32
+from rm_interfaces.msg import GimbalRegionCmd
 from geometry_msgs.msg import Twist
-from referee_msg.msg import Referee
-import numpy
 import glob
 
 
@@ -22,20 +18,6 @@ CMD_ID_AUTOAIM_DATA_RX= 0x81
 
 
 ser=0
-# 定义结构体
-class All_Data_Rx:
-    def __init__(self, yaw_aim, pitch_aim,fire_or_not,vx, vy, rotate, yaw_speed_nav, pitch_mode_nav,super_cap_mode,back,reach_goal):
-        self.yaw_aim = yaw_aim
-        self.pitch_aim= pitch_aim
-        self.fire_or_not= fire_or_not
-        self.vx = vx
-        self.vy = vy
-        self.rotate =rotate
-        self.yaw_speed_nav = yaw_speed_nav
-        self.pitch_mode_nav = pitch_mode_nav
-        self.super_cap_mode = super_cap_mode
-        self.back = back
-        self.reach_goal =reach_goal
 
              
 # CRC-8 校验表
@@ -86,37 +68,15 @@ def find_usb_devices():
 
 
 # 打包结构体为字节流
-
-'''
-pack format:
-Format  Python
-c       char                  
-?       bool
-h       short               (-32768-32767)
-H       unsigned short      (0-65535)
-B       unsigned char       (0-255)
-i       int                 (-2147483648-2147483647)
-I       unsigned int        (0-4294967295)
-f       float
-d       double
-s       char[]
-'''
-def pack_all(data):
-    return struct.pack('<ff??fffffB?B', data.yaw_aim, \
-                                        data.pitch_aim,\
-                                        data.fire_or_not,\
-                                        0.0,
-                                        data.vx,\
-                                        data.vy, \
-                                        data.rotate, \
-                                        data.yaw_speed_nav, \
-                                        data.pitch_mode_nav,\
-                                        data.super_cap_mode,\
-                                        data.back,\
-                                        data.reach_goal)
-
-
-
+def pack_all(field_values):
+    format_string = '<' # 小端字节序
+    values = []
+    
+    for field, fmt in field_values:
+        format_string += fmt
+        values.append(field)
+    
+    return struct.pack(format_string, *values)
 
 # 构建消息
 def build_all_message(data):
@@ -137,36 +97,60 @@ class SNode(Node):
 
         #导航
         self.sub_nav = self.create_subscription(Twist, '/cmd_vel_chassis', self.nav_callback,rclpy.qos.qos_profile_sensor_data)
-        self.sub_yaw = self.create_subscription(Float32,'nav_yaw',self.yaw_callback,10)
         self.sub_dip_angle = self.create_subscription(Float32,"/dip_angle",self.dip_angle_callback,10)
-
-        self.sub_pitch = self.create_subscription(Bool,'nav_pitch',self.pitch_callback,10)
-        self.sub_rot = self.create_subscription(Bool,"/skip_aim",self.inv_callback,10)
+        self.sub_nav = self.create_subscription(GimbalRegionCmd, '/serial/gimbal_region_cmd', self.chassis_mode_callback,10)
+        
+        self.sub_pitch = self.create_subscription(Bool,'/serial/nav_pitch',self.pitch_callback,10)
         self.sub_reach_goal = self.create_subscription(Bool,"/reach_hero",self.goal_callback,10)
 
-        self.inv_dec = False
-        # self.clock_timer = self.create_timer(6,self.clock_callback)
 
-        self.rotate = 22000 #小陀螺逻辑由电控控制，导航只需要传一个定值
-        self.pitch = 0
-        self.vx = 0.0
-        self.vy = 0.0
-        self.v_yaw = 1.0
+        self.publish_gimbal = self.create_subscription(Gimbal,"gimbal_status",self.yaw_C_board_callback,10)
 
-        self.yaw_aim = 0.0
-        self.msg_fire = 0
-        self.pitch_aim = 0.0
-        self.super_cap_mode = 1
-        self.back = False
-        self.reach_goal = False
+        #----------------------辅助变量-------------------------------#
+        self.yaw_C_board = 0.0              # 从C板传来的距离零点的距离 
+        self.exp_gimbal_angle = 0.0         # 当前时刻期望的加上云台零点的角度
+        self.in_region = False              # 判断是否为刚进入特殊路段
 
-        self.clock = 1
-        
+
+
+        #-----------------------模式相关数据---------------------------#
+        self.chassis_mode  = 2              # 底盘模式(1跟头 2陀螺)
+        self.pass_bumpy_mode = 0             # 是否正在gimbal_region_callback过颠簸路段
+        self.pitch = 0                      # pitch为打人模式还是前哨模式
+        #-----------------------自瞄相关数据---------------------------#
+        self.yaw_aim = 0.0                  # 自瞄yaw角
+        self.pitch_aim = 0.0                # 自瞄pitch角
+        self.msg_fire = 0                   # 自瞄是否开火
+        self.turn_back = False              # 进入大回环
+        #-----------------------导航相关数据---------------------------#
+        self.vx = 0.0                       # 导航速度x
+        self.vy = 0.0                       # 导航速度x
+        self.yaw_angle_follow_head = 0.0    # 当为跟头模式时云台预期角度
+        self.super_cap_mode = 0             # 是否正在上坡
+        self.reach_hero = False             # 是否到达抓英雄点位
+
+
+
     def pitch_callback(self,msg:Bool):
         if msg.data == True:
             self.pitch = 1
         else:
             self.pitch = 0
+    def yaw_C_board_callback(self,msg:Gimbal):
+        self.yaw_C_board = msg.yaw
+
+    def chassis_mode_callback(self,msg:GimbalRegionCmd):
+        self.chassis_mode = msg.chassis_mode
+        self.pass_bumpy_mode = msg.pass_special_region
+        self.yaw_angle_follow_head =msg.pass_region_angle
+        if self.chassis_mode == 2 and self.pass_bumpy_mode == 0 : # 离开颠簸路段
+            self.in_region = False
+            self.exp_gimbal_angle = 0.0
+        elif self.chassis_mode == 1 and self.pass_bumpy_mode == 1 and not self.in_region:
+            self.in_region = True
+            self.exp_gimbal_angle = msg.pass_region_angle + self.yaw_C_board
+            print(self.exp_gimbal_angle)
+        
 
     def dip_angle_callback(self, msg:Float32):
         degree = msg.data
@@ -174,19 +158,7 @@ class SNode(Node):
             self.super_cap_mode = 0
         else:
             self.super_cap_mode = 2
-    # def clock_callback(self):
-    #     if self.clock == 1:
-    #         self.clock = -1
-    #     else:
-    #         self.clock = 1
-
-    def yaw_callback(self,msg:Float32):
-        self.v_yaw = 1.0
-        # if self.vx == 0.0 and self.vy == 0.0 and msg.data == 1.5: #msg.data是跑动时候的转速
-        #     self.v_yaw = self.clock*msg.data*2.0
-        # else:
-        #     self.v_yaw = self.clock*msg.data
-
+            
     def nav_callback(self, msg:Twist):
          self.vx=msg.linear.x
          self.vy=msg.linear.y
@@ -195,29 +167,45 @@ class SNode(Node):
         self.msg_fire=msg.fire_advice
         self.yaw_aim=msg.yaw
         self.pitch_aim=msg.pitch
-
-    def inv_callback(self,msg):
-        self.inv_dec=msg.data
     def back_callback(self,msg):
-        self.back=msg.data
+        self.turn_back=msg.data
     def goal_callback(self,msg):
-        self.reach_goal=msg.data
+        self.reach_hero=msg.data
 
+    '''
+    pack format:
+    Format  Python
+    c       char                  
+    ?       bool
+    h       short               (-32768-32767)
+    H       unsigned short      (0-65535)
+    B       unsigned char       (0-255)
+    i       int                 (-2147483648-2147483647)
+    I       unsigned int        (0-4294967295)
+    f       float
+    d       double
+    s       char[]
+    '''
     def send_all(self):
-        data = All_Data_Rx(
-            self.yaw_aim,
-            self.pitch_aim,
-            self.msg_fire,
-            self.vx,
-            self.vy,
-            self.rotate,
-            self.v_yaw,
-            self.pitch,
-            self.super_cap_mode,
-            self.back,
-            self.reach_goal
-        )
-        message = build_all_message(data)
+        field_values = [
+            
+            (self.chassis_mode,'B'),
+            (self.pass_bumpy_mode,'B'),
+            (self.pitch, 'B'),
+
+            (self.yaw_aim, 'f'),
+            (self.pitch_aim, 'f'),
+            (self.msg_fire, '?'),
+            (self.turn_back, '?'),
+
+            (self.vx, 'f'),
+            (self.vy, 'f'),
+            (self.exp_gimbal_angle,'f'),
+            (self.super_cap_mode, 'B'),
+            (self.reach_hero, 'B'),
+        ]
+        message = build_all_message(field_values)
+        # print(message)
         ser.write(message)
 def main(args=None):
     rclpy.init(args=args)

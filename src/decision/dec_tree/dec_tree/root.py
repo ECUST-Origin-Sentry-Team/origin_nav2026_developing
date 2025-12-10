@@ -252,7 +252,7 @@ def create_dec(node,nav,qos_profile):
 
     send_pitch = py_trees_ros.publishers.FromBlackboard(
         name="send_pitch",
-        topic_name="nav_pitch",
+        topic_name="/serial/nav_pitch",
         topic_type=Bool,
         qos_profile=qos_profile,
         blackboard_variable="pitch"

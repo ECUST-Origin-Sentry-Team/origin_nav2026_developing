@@ -8,8 +8,7 @@ from ament_index_python.packages import get_package_share_directory
 import os
 
 def generate_launch_description():
-    pcd_file = os.path.join(get_package_share_directory('point_lio'),'PCD','601.pcd')
-
+    pcd_file = "src/localization/Point-LIO-grid_map_ros2/PCD/601.pcd"
     start_localization = LoadComposableNodes(
         target_container='container',
         composable_node_descriptions=[
@@ -25,9 +24,9 @@ def generate_launch_description():
                     "max_dist_sq": 1.0,
                     "map_frame": 'map',
                     "odom_frame": 'odom',
-                    "base_link_frame": 'base_link',
+                    "base_link_frame": 'aft_mapped',
                     "pcd_file": pcd_file,
-                    "cloud_registered_topic": 'cloud_registered',
+                    "cloud_registered_topic": '/livox/lidar/pointcloud',
                 }],
             ),
         ]

@@ -83,9 +83,10 @@
         "span": "cpp",
         "valarray": "cpp",
         "charconv": "cpp",
-        "expected": "cpp"
+        "expected": "cpp",
+        "nonlinearoptimization": "cpp"
     },
-    "cmake.sourceDirectory": "/home/sb/origin_nav2025_test/src/lidar/lidar_transform",
+    "cmake.sourceDirectory": "/home/sb/origin_nav2025_test/src/bringup",
     "python.analysis.extraPaths": [
         "./install/referee_msg/local/lib/python3.10/dist-packages",
         "./install/rm_interfaces/local/lib/python3.10/dist-packages"

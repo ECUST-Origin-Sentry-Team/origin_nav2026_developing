@@ -175,7 +175,6 @@ void IcpNode::pointcloudCallback(
         std::make_shared<geometry_msgs::msg::PoseWithCovarianceStamped>();
     pose_msg->header = msg->header;
     pose_msg->pose.pose = initial_pose_;
-    RCLCPP_INFO(this->get_logger(), "??????????????????????");
 
     initialPoseCallback(pose_msg);
     first_scan_ = false;

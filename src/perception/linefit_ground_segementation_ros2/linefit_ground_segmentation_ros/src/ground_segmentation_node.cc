@@ -5,6 +5,7 @@
 #include <pcl/io/ply_io.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
+#include <pcl/filters/passthrough.h>
 #include <rclcpp/qos.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
@@ -13,7 +14,8 @@
 
 #include "ground_segmentation/ground_segmentation.h"
 
-class SegmentationNode : public rclcpp::Node {
+class SegmentationNode : public rclcpp::Node
+{
 public:
   SegmentationNode(const rclcpp::NodeOptions &node_options);
   void scanCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
@@ -29,7 +31,8 @@ public:
 };
 
 SegmentationNode::SegmentationNode(const rclcpp::NodeOptions &node_options)
-    : Node("ground_segmentation", node_options) {
+    : Node("ground_segmentation", node_options)
+{
   gravity_aligned_frame_ =
       this->declare_parameter("gravity_aligned_frame", "gravity_aligned");
 
@@ -56,13 +59,16 @@ SegmentationNode::SegmentationNode(const rclcpp::NodeOptions &node_options)
   params_.r_max_square = this->declare_parameter("r_max", 50.0);
   // Params that need to be squared.
   double r_min, r_max, max_fit_error;
-  if (this->get_parameter("r_min", r_min)) {
+  if (this->get_parameter("r_min", r_min))
+  {
     params_.r_min_square = r_min * r_min;
   }
-  if (this->get_parameter("r_max", r_max)) {
+  if (this->get_parameter("r_max", r_max))
+  {
     params_.r_max_square = r_max * r_max;
   }
-  if (this->get_parameter("max_fit_error", max_fit_error)) {
+  if (this->get_parameter("max_fit_error", max_fit_error))
+  {
     params_.max_error_square = max_fit_error * max_fit_error;
   }
   segmenter_ = std::make_shared<GroundSegmentation>(params_);
@@ -84,7 +90,8 @@ SegmentationNode::SegmentationNode(const rclcpp::NodeOptions &node_options)
 }
 
 void SegmentationNode::scanCallback(
-    const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+    const sensor_msgs::msg::PointCloud2::SharedPtr msg)
+{
   pcl::PointCloud<pcl::PointXYZ> cloud;
   pcl::fromROSMsg(*msg, cloud);
   pcl::PointCloud<pcl::PointXYZ> cloud_transformed;
@@ -92,24 +99,50 @@ void SegmentationNode::scanCallback(
   std::vector<int> labels;
 
   bool is_original_pc = true;
-  if (!gravity_aligned_frame_.empty()) {
+  if (!gravity_aligned_frame_.empty())
+  {
     geometry_msgs::msg::TransformStamped tf_stamped;
-    try {
+    try
+    {
       tf_stamped = tf_buffer_->lookupTransform(
-          gravity_aligned_frame_, msg->header.frame_id, msg->header.stamp);
+          gravity_aligned_frame_, msg->header.frame_id, rclcpp::Time(0));
       // Remove translation part.
       tf_stamped.transform.translation.x = 0;
       tf_stamped.transform.translation.y = 0;
       tf_stamped.transform.translation.z = 0;
-      Eigen::Affine3d tf;
+      Eigen::Affine3d tf = Eigen::Affine3d::Identity();
       tf.translate(Eigen::Vector3d(0, 0, 0));
-      tf.rotate(Eigen::Quaterniond(
-          tf_stamped.transform.rotation.w, tf_stamped.transform.rotation.x,
-          tf_stamped.transform.rotation.y, tf_stamped.transform.rotation.z));
-      // tf::transformMsgToEigen(tf_stamped.transform, tf);
+      Eigen::Quaterniond q(tf_stamped.transform.rotation.w,
+                           tf_stamped.transform.rotation.x,
+                           tf_stamped.transform.rotation.y,
+                           tf_stamped.transform.rotation.z);
+      q.normalize();
+
+      Eigen::Matrix3d R = q.toRotationMatrix();
+
+
+      Eigen::Vector3d z_axis = R.col(2);
+
+      Eigen::Vector3d x_axis;
+      x_axis = x_axis - z_axis * (x_axis.dot(z_axis));
+      x_axis.normalize();
+
+      Eigen::Vector3d y_axis = z_axis.cross(x_axis);
+
+      Eigen::Matrix3d R_no_yaw;
+      R_no_yaw.col(0) = x_axis;
+      R_no_yaw.col(1) = y_axis;
+      R_no_yaw.col(2) = z_axis;
+
+      Eigen::Quaterniond q_no_yaw(R_no_yaw);
+
+      tf.rotate(q_no_yaw);
+
       pcl::transformPointCloud(cloud, cloud_transformed, tf);
       is_original_pc = false;
-    } catch (tf2::TransformException &ex) {
+    }
+    catch (tf2::TransformException &ex)
+    {
       RCLCPP_WARN(this->get_logger(),
                   "Failed to transform point cloud into "
                   "gravity frame: %s",
@@ -121,13 +154,22 @@ void SegmentationNode::scanCallback(
   const pcl::PointCloud<pcl::PointXYZ> &cloud_proc =
       is_original_pc ? cloud : cloud_transformed;
 
-  segmenter_->segment(cloud_proc, &labels);
+  pcl::PointCloud<pcl::PointXYZ> cloud_z;
+  pcl::PassThrough<pcl::PointXYZ> pass;
+  pass.setInputCloud(cloud_proc.makeShared());
+  pass.setFilterFieldName("z");
+  pass.setFilterLimits(-1.0f, 2.0f);
+  pass.filter(cloud_z);
+
+  // RCLCPP_INFO(this->get_logger(),"%s",is_original_pc);
+  segmenter_->segment(cloud_z, &labels);
   pcl::PointCloud<pcl::PointXYZ> ground_cloud, obstacle_cloud;
-  for (size_t i = 0; i < cloud.size(); ++i) {
+  for (size_t i = 0; i < cloud_z.size(); ++i)
+  {
     if (labels[i] == 1)
-      ground_cloud.push_back(cloud[i]);
+      ground_cloud.push_back(cloud_z[i]);
     else
-      obstacle_cloud.push_back(cloud[i]);
+      obstacle_cloud.push_back(cloud_z[i]);
   }
   auto ground_msg = std::make_shared<sensor_msgs::msg::PointCloud2>();
   auto obstacle_msg = std::make_shared<sensor_msgs::msg::PointCloud2>();
@@ -139,7 +181,8 @@ void SegmentationNode::scanCallback(
   obstacle_pub_->publish(*obstacle_msg);
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
   rclcpp::init(argc, argv);
   rclcpp::NodeOptions options;
   auto node = std::make_shared<SegmentationNode>(options);

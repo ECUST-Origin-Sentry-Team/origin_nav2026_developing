@@ -4,6 +4,7 @@
 #include <small_gicp/pcl/pcl_registration.hpp>
 
 #include <pcl_conversions/pcl_conversions.h>
+#include <pcl/filters/passthrough.h>
 
 #include <tf2_eigen/tf2_eigen.hpp>
 
@@ -71,6 +72,12 @@ namespace small_gicp_localization
             return;
         }
         RCLCPP_INFO(this->get_logger(),"success reading %s",pcd_file.c_str());
+        pcl::PassThrough<pcl::PointXYZI> height_filter;
+        height_filter.setInputCloud(PCD.makeShared()); 
+        height_filter.setFilterFieldName("z"); 
+        height_filter.setFilterLimits(-0.6, 10.0); 
+        height_filter.setNegative(false);
+        height_filter.filter(PCD); 
         PCD_downsampled = small_gicp::voxelgrid_sampling_omp<pcl::PointCloud<pcl::PointXYZI>,pcl::PointCloud<pcl::PointCovariance>>(PCD,global_leaf_size);
         PCD_tree = std::make_shared<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>>(PCD_downsampled, small_gicp::KdTreeBuilderOMP(num_threads));
     }

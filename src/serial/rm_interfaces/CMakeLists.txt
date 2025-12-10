@@ -30,6 +30,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/SerialReceiveData.msg"
   "msg/IsAbleToChaseCall.msg"
   "msg/IsAbleToChaseSend.msg"
+  "msg/GimbalRegionCmd.msg"
   "srv/SetMode.srv"
   "srv/InvincibleInquire.srv"
   DEPENDENCIES

@@ -8,8 +8,8 @@ def generate_launch_description():
         executable='static_transform_publisher',
         name='base_link_to_livox',
         arguments=[
-            '0.0', '0.0', '-0.64',  # translation
-            '0.0', '0.0', '0.521', '0.854',  # rotation
+            '-0.1', '-0.15', '-0.33',  # translation
+            '0.0', '0.0', '0.0', '1.0',  # rotation
             'aft_mapped', 'base_link'
         ]
     )

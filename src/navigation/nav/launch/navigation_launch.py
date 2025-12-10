@@ -156,12 +156,12 @@ def generate_launch_description():
                 name='waypoint_follower',
                 parameters=[configured_params],
                 remappings=remappings),
-            # ComposableNode(
-            #     package='nav2_amcl',
-            #     plugin='nav2_amcl::AmclNode',
-            #     name='amcl',
-            #     parameters=[configured_params],
-            #     remappings=remappings),
+            ComposableNode(
+                package='nav2_amcl',
+                plugin='nav2_amcl::AmclNode',
+                name='amcl',
+                parameters=[configured_params],
+                remappings=remappings),
             ComposableNode(
                 package='nav2_velocity_smoother',
                 plugin='nav2_velocity_smoother::VelocitySmoother',
@@ -181,6 +181,12 @@ def generate_launch_description():
 
     load_nodes = GroupAction(
         actions=[
+            Node(
+                package='nav2_amcl',
+                executable='amcl',
+                name='amcl',
+                parameters=[configured_params],
+                remappings=remappings),
             Node(
                 package='nav2_controller',
                 executable='controller_server',

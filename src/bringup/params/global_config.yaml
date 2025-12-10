@@ -1,2 +1,2 @@
-self_color : blue
-use_fake_referee : true
+self_color : red
+use_fake_referee : false

@@ -50,7 +50,7 @@ public:
         );
 
         pub_fake_timer = this->create_wall_timer(
-            std::chrono::milliseconds(100),std::bind(&FakeBaselink::pub_fake_callback,this)
+            std::chrono::milliseconds(50),std::bind(&FakeBaselink::pub_fake_callback,this)
         );
 
         init_base_link_fake();
@@ -67,7 +67,6 @@ public:
                 break;
             }
             catch(...){
-                RCLCPP_INFO(this->get_logger(),"fake?fake?fake?");
             }
         }
         fake_q = odom_to_base_link.transform.rotation;
@@ -124,7 +123,7 @@ public:
         double angle_diff = base_link_angle - tf2::getYaw(fake_q);
 
         geometry_msgs::msg::Twist cmd_vel_after;
-        cmd_vel_after.angular.z = (cmd_vel->angular.z != 0) ? 2.0 : 0;
+        cmd_vel_after.angular.z = cmd_vel->angular.z ;
         cmd_vel_after.linear.x = cmd_vel->linear.x * cos(angle_diff) + cmd_vel->linear.y * sin(angle_diff);
         cmd_vel_after.linear.y = -cmd_vel->linear.x * sin(angle_diff) + cmd_vel->linear.y * cos(angle_diff);
 

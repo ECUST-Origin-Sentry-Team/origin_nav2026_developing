@@ -248,7 +248,7 @@ void GroundSegmentation::insertionThread(const PointCloud& cloud,
     pcl::PointXYZ point(cloud[i]);
     const double range_square = point.x * point.x + point.y * point.y;
     const double range = sqrt(range_square);
-    if (range_square < params_.r_max_square && range_square > params_.r_min_square) {
+    if (range_square < params_.r_max_square && range_square > params_.r_min_square ) {
       const double angle = std::atan2(point.y, point.x);
       const unsigned int bin_index = (range - r_min) / bin_step;
       const unsigned int segment_index = (angle + M_PI) / segment_step;

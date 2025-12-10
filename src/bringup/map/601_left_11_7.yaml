@@ -1,0 +1,12 @@
+image: 601_left_11_7.pgm
+mode: trinary
+width: 224
+height: 224
+resolution: 0.0500000007
+origin:
+  - -13.800000190734863
+  - -28.399999618530273
+  - 0
+negate: 0
+occupied_thresh: 0.65000000000000002
+free_thresh: 0.25

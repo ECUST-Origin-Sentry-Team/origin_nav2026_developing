@@ -6,7 +6,7 @@ amcl:
     alpha3: 0.2
     alpha4: 0.2
     alpha5: 0.2
-    base_frame_id: "base_link"
+    base_frame_id: "aft_mapped"
     beam_skip_distance: 0.5
     beam_skip_error_threshold: 0.9
     beam_skip_threshold: 0.3
@@ -40,6 +40,14 @@ amcl:
     scan_topic: /scan
     map_topic: /map
     set_initial_pose: True
+    # # 核心修正：添加初始偏航角偏移（单位：弧度）
+    # # 根据之前测量的map与odom的yaw偏差值设置（例如偏差62.45度，对应-1.09弧度）
+    # initial_pose_yaw: -1.09
+    # # 可选：放宽初始角度的协方差，让AMCL更快收敛到正确方向
+    initial_pose_covariance:
+      x: 0.1
+      y: 0.1
+      yaw: 0.1
 
 bt_navigator:
   ros__parameters:
@@ -47,7 +55,7 @@ bt_navigator:
     global_frame: map
     robot_base_frame: base_link_fake
     #robot_base_frame: base_link
-    odom_topic: /Odometry
+    odom_topic: /odometry_path
     bt_loop_duration: 10
     default_server_timeout: 20
     # 'default_nav_through_poses_bt_xml' and 'default_nav_to_pose_bt_xml' are use defaults:
@@ -99,10 +107,10 @@ bt_navigator:
       - nav2_wait_cancel_bt_node
       - nav2_spin_cancel_bt_node
       - nav2_back_up_cancel_bt_node
+      - nav2_escape_action_bt_node
       - nav2_assisted_teleop_cancel_bt_node
       - nav2_drive_on_heading_cancel_bt_node
       - nav2_is_battery_charging_condition_bt_node
-      - nav2_escape_action_bt_node
 
 bt_navigator_navigate_through_poses_rclcpp_node:
   ros__parameters:
@@ -161,82 +169,134 @@ controller_server:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.3
-      yaw_goal_tolerance: 6.28
+      yaw_goal_tolerance: 3.14
+    
+
     # FollowPath:
-    #   plugin: "dwb_core::DWBLocalPlanner"
-    #   debug_trajectory_details: False
-    #   min_vel_x: -2.5
-    #   min_vel_y: -2.5
-    #   max_vel_x: 2.0
-    #   max_vel_y: 2.0
-    #   max_vel_theta: 12.0
-    #   min_speed_xy: -15.0
-    #   max_speed_xy: 2.5
-    #   min_speed_theta: -12.0
-    #   acc_lim_x: 30.0
-    #   acc_lim_y: 30.0
-    #   acc_lim_theta: 15.0
-    #   decel_lim_x: -3.5
-    #   decel_lim_y: -3.5
-    #   decel_lim_theta: -15.0 
-    #   vx_samples: 40
-    #   vy_samples: 40
-    #   vtheta_samples: 0
-    #   sim_time: 0.51
-    #   linear_granularity: 0.05
-    #   angular_granularity: 0.025
-    #   transform_tolerance: 0.2
-    #   xy_goal_tolerance: 0.15
-    #   trans_stopped_velocity: 0.0
-    #   short_circuit_trajectory_evaluation: False
-    #   stateful: True
-    #   critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist","Twirling"]
-    #   BaseObstacle.scale: 3.0
-    #   PathAlign.scale: 450.0
-    #   PathAlign.forward_point_distance: 0.2
-    #   GoalAlign.scale: 24.0
-    #   GoalAlign.forward_point_distance: 0.3
-    #   PathDist.scale: 5000.0
-    #   #GoalDist.scale: 1000.0
-    #   RotateToGoal.scale: 32.0
-    #   RotateToGoal.slowing_factor: 5.0
-    #   RotateToGoal.lookahead_time: -1.0
-    #   Twirling.scale: 32.0
-
-    FollowPath:
-        plugin: "pb_omni_pid_pursuit_controller::OmniPidPursuitController"
-        translation_kp: 3.0
-        translation_ki: 0.0
-        translation_kd: 0.0
-        enable_rotation: false
-        rotation_kp: 3.0
-        rotation_ki: 0.1
-        rotation_kd: 0.3
-        transform_tolerance: 0.2
-        min_max_sum_error: 1.0
-        lookahead_dist: 1.0
-        use_velocity_scaled_lookahead_dist: true
-        lookahead_time: 0.5
-        min_lookahead_dist: 0.5
-        max_lookahead_dist: 1.0
-        use_interpolation: True
-        use_rotate_to_heading: false
-        use_rotate_to_heading_treshold: 0.1
-        min_approach_linear_velocity: 0.0
-        approach_velocity_scaling_dist: 1.5
-        v_linear_min: -6.5
-        v_linear_max: 6.5
-        v_angular_min: -10.0
-        v_angular_max: 10.0
-        curvature_min: 0.4
-        curvature_max: 0.7
-        reduction_ratio_at_high_curvature: 0.6
-        curvature_forward_dist: 1.0
-        curvature_backward_dist: 0.3
-        max_velocity_scaling_factor_rate: 0.9
+    #     plugin: "pb_omni_pid_pursuit_controller::OmniPidPursuitController"
+    #     translation_kp: 4.0
+    #     translation_ki: 0.0
+    #     translation_kd: 0.0
+    #     enable_rotation: false
+    #     rotation_kp: 3.0
+    #     rotation_ki: 0.1
+    #     rotation_kd: 0.3
+    #     transform_tolerance: 0.2
+    #     min_max_sum_error: 1.0
+    #     lookahead_dist: 1.0
+    #     use_velocity_scaled_lookahead_dist: true
+    #     lookahead_time: 0.5
+    #     min_lookahead_dist: 0.5
+    #     max_lookahead_dist: 1.0
+    #     use_interpolation: True
+    #     use_rotate_to_heading: false
+    #     use_rotate_to_heading_treshold: 0.1
+    #     min_approach_linear_velocity: 0.0
+    #     approach_velocity_scaling_dist: 1.5
+    #     v_linear_min: -14.5
+    #     v_linear_max: 14.5
+    #     v_angular_min: -100.0
+    #     v_angular_max: 100.0
+    #     curvature_min: 0.4
+    #     curvature_max: 0.7
+    #     reduction_ratio_at_high_curvature: 0.6
+    #     curvature_forward_dist: 1.0
+    #     curvature_backward_dist: 0.3
+    #     max_velocity_scaling_factor_rate: 0.9
 
 
-  
+    FollowPath:    
+      plugin: "nav2_mppi_controller::MPPIController"
+      #param 
+      adjustThre: 14.0 # slopeDegree larger than this value will trigger the adjust heading behavior
+      minAngleDiff: 365.0 # if the angle difference is larger than this value, the robot will continue to adjust heading
+      adjustHeadingSpeed: 0.2 # angular speed to adjust heading
+      # 
+      time_steps: 56 # prediction horizon = time_steps x model_dt = 3s
+      model_dt: 0.05 # =1/controller_frequency
+      batch_size: 2000 # Count of randomly sampled candidate trajectories from current optimal control sequence in a given iteration. 1000 @ 50 Hz or 2000 @ 30 Hz seems to produce good results.
+      vx_std: 0.5
+      vy_std: 0.5
+      wz_std: 0.1
+      vx_max: 1.0 #1.4 # prediction horizon x vx_max = 3.0 m -->local costmap dim should larger than 3.0 x 2 = 6m
+      vx_min: -1.0 # Maximum reverse velocity (m/s).
+      vy_max: 1.0
+      wz_max: 0.1
+      ax_max: 10.0
+      ay_max: 10.0
+      ax_min: -10.0
+      az_max: 0.1
+
+      iteration_count: 1 # Recommended to remain as 1 and instead prefer larger batch sizes.
+      prune_distance: 7.2 # proportion to your maximum velocity and prediction horizon. #影响上坡,值越大越上不了
+      transform_tolerance: 0.1 # Time tolerance for data transformations with TF (s).
+      temperature: 0.3 # 0 mean use control with best cost, huge value will lead to just taking mean of all trajectories without cost consideration.
+      gamma: 0.015 #0.07官方默认0.1 # A trade-off between smoothness (high) and low energy (low). This is a complex parameter that likely won’t need to be changed from the default.
+      motion_model: "Omni"
+      visualize: true # set to true to visualize the trajectories, but it will slow down the computation by a lot
+      reset_period: 1.0 # Required time of inactivity to reset optimizer (only in Humble
+      regenerate_noises: false
+      retry_attempt_limit: 3 # Number of attempts to find feasible trajectory on failure for soft-resets before reporting total failure.
+      TrajectoryVisualizer:
+        trajectory_step: 5
+        time_step: 3
+      # AckermannConstraints:
+      #   min_turning_r: 0.2
+      critics: ["ObstaclesCritic", "GoalCritic", "PathAlignCritic", "PathFollowCritic", "TwirlingCritic"]
+      GoalCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        threshold_to_consider: 2.8 # Minimal distance (m) between robot and goal above which goal distance cost considered. It is wise to start with this as being the same as your prediction horizon to have a clean hand-off with the path follower critic.
+        # i.e. When this critic is add to the cost function 越小越上不去坡
+      PreferForwardCritic: # moving in the forward direction, rather than reversing.
+        enabled: false
+        cost_power: 1
+        cost_weight: 5
+        threshold_to_consider: 0.7 # Distance (m) between robot and goal to stop considering preferring forward and allow goal critics to take over.
+      ObstaclesCritic: # 如果容易撞到低矮的障碍物，检查地形分析是否正确然后再调整这个参数
+        enabled: true
+        cost_power: 1
+        repulsion_weight: 0.3 #! Higher radii should correspond to reduced repulsion_weight due to the penalty formation (e.g. inflation_radius - min_dist_to_obstacle). 
+        # This is separated from the critical term to allow for fine tuning of obstacle behaviors with path alignment for dynamic scenes without impacting actions which may directly lead to near-collisions. This is applied within the inflation_radius distance from obstacles.
+        critical_weight: 20.0
+        consider_footprint: false # turn on this can increase computation cost
+        collision_cost: 100.0
+        collision_margin_distance: 0.05 # 0.05 # Margin distance (m) from collision to apply severe penalty, similar to footprint inflation. Between 0.05-0.2 is reasonable. Note that it will highly influence the controller not to enter spaces more confined than this, so ensure this parameter is set lower than the narrowest you expect the robot to need to traverse through.
+        near_goal_distance: 0.2 #0.1 # if the robot is within this distance of the goal, it will not be repelled by obstacles.
+        inflation_radius: 0.55 #0.4 # Radius to inflate costmap around lethal obstacles. This should be the same as for your inflation layer (Humble only)
+        cost_scaling_factor: 5.0 # Exponential decay factor across inflation radius. This should be the same as for your inflation layer (Humble only)
+        inflation_layer_name: ["local_inflation_layer","global_inflation_layer"] 
+      PathAlignCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 6.0
+        max_path_occupancy_ratio: 0.001
+        trajectory_point_step: 3 #?
+        threshold_to_consider: 2.0 # 0.7 # Distance (m) between robot and goal to stop considering path alignment and allow goal critics to take over. So just keep it same as threshold_to_consider in GoalCritic.
+        offset_from_furthest: 20 #2 #  A selection of this value to be ~30% of the maximum velocity distance projected is good 
+        # (e.g. if a planner produces points every 2.5cm, 60 can fit on the 1.5m local costmap radius. If the max speed is 0.5m/s with a 3s prediction time, 
+        # then 20 points represents 33% of the maximum speed projected over the prediction horizon onto the path). When in doubt, 
+        # prediction_horizon_s * max_speed / path_resolution / 3.0 is a good baseline. = 3 * 0.8 / 0.1 /3.0
+        use_path_orientations: false
+      PathFollowCritic: #? incentivizes making progress along the path, what is the diff between this and PathAlignCritic?
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0 #越大越不稳定
+        offset_from_furthest: 10 # Number of path points after furthest one any trajectory achieves to drive path tracking relative to.
+        threshold_to_consider: 0.0 # That is to say, path following will be considered until the robot is within this distance of the goal, at which point the goal critic will take over.
+      PathAngleCritic: # This critic penalizes trajectories at a high relative angle to the path. This helps the robot make sharp turns when necessary due to large accumulated angular errors.
+        enabled: false
+        cost_power: 1 
+        cost_weight: 5.0
+        offset_from_furthest: 25
+        threshold_to_consider: 2.8
+        max_angle_to_furthest: 1.0
+        mode: 2
+      TwirlingCritic:
+        enabled: True
+        twirling_cost_power: 1
+        twirling_cost_weight: 10.0
 
 
 local_costmap:
@@ -249,15 +309,15 @@ local_costmap:
       #robot_base_frame: base_link
       use_sim_time: False
       rolling_window: true
-      width: 8
-      height: 8
+      width: 9
+      height: 9
       resolution: 0.05
-      robot_radius: 0.01
+      robot_radius: 0.15 #0.15
       plugins: ["static_layer","obstacle_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 1.5
-        inflation_radius: 0.5
+        cost_scaling_factor: 5.0
+        inflation_radius: 0.55 #0.5
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
@@ -317,20 +377,21 @@ local_costmap:
 global_costmap:
   global_costmap:
     ros__parameters:
-      update_frequency: 20.0
-      publish_frequency: 15.0
+      update_frequency: 10.0
+      publish_frequency: 5.0
       global_frame: map
       robot_base_frame: base_link_fake
       #robot_base_frame: base_link
       use_sim_time: False
       robot_radius: 0.15
       resolution: 0.05
-      track_unknown_space: true
-      plugins: ["static_layer", "obstacle_layer","inflation_layer"]
-      # plugins: ["static_layer","inflation_layer"]
+      track_unknown_space: True
+      static_map: True
+      #plugins: ["static_layer", "obstacle_layer","inflation_layer"]
+      plugins: ["static_layer", "inflation_layer"]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: true
+        enabled: False
         observation_sources: livox 
         max_obstacle_height: 100.0
         min_obstacle_height: -100.0
@@ -348,11 +409,15 @@ global_costmap:
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
+        track_unknown_space: True
+        map_topic: /map
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 15.0  # 系数越小,从机器人半径减小的斜率越小,外围代价越大
-        inflation_radius: 0.4  #0.55
-      always_send_full_costmap: True
+        cost_scaling_factor: 5.0 #10.0 #20.0
+        inflation_radius: 0.5 #12.0 #0.55     
+        always_send_full_costmap: True
+
+
 
 map_server:
   ros__parameters :
@@ -380,6 +445,12 @@ planner_server:
       use_astar: false
       allow_unknown: true
       use_final_approach_orientation: true
+    # GridBased:
+    #   plugin: "nav2_theta_star_planner/ThetaStarPlanner" # In Iron and older versions, "/" was used instead of "::"
+    #   how_many_corners: 8
+    #   w_euc_cost: 1.0
+    #   w_traversal_cost: 2.0
+    #   w_heuristic_cost: 1.0
 
 smoother_server:
   ros__parameters:
@@ -415,9 +486,11 @@ behavior_server:
     transform_tolerance: 0.2
     use_sim_time: False
     simulate_ahead_time: 2.0
-    max_rotational_vel: 0.8
-    min_rotational_vel: 0.3
+    max_rotational_vel: 1.0
+    min_rotational_vel: 0.4
     rotational_acc_lim: 3.2
+    collision_check: false
+
 
 robot_state_publisher:
   ros__parameters:
@@ -437,14 +510,14 @@ waypoint_follower:
 velocity_smoother:
   ros__parameters:
     use_sim_time: False
-    smoothing_frequency: 5.0
+    smoothing_frequency: 20.0 #5.0
     scale_velocities: False
     feedback: "CLOSED_LOOP"
     max_velocity: [15.0, 15.0, 2.5]
     min_velocity: [-15.0, -15.0, -2.5]
     max_accel: [100.0, 100.0, 100.0]
     max_decel: [-100.0, -100.0, -100.0]
-    odom_topic: "/odometry/imu"
+    odom_topic: "/odometry_path"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 1.0

@@ -1,8 +1,8 @@
 import struct
 import time
 from referee_msg.msg import Referee
-from rm_interfaces.msg import Target,GimbalCmd,Gimbal
-from rclpy.node import Node, Publisher
+from rm_interfaces.msg import Gimbal
+from rclpy.node import Node
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 import tf_transformations
@@ -44,8 +44,11 @@ class RNode(Node):
         self.publish_gimbal = self.create_publisher(Gimbal,"gimbal_status",10)
         self.publish_referee = self.create_publisher(Referee,"Referee",10)
         self.publisher_timer = self.create_timer(0.0067,self.publish_message)
-        self.declare_parameter('use_fake_referee', False)
+        self.declare_parameter('use_fake_referee', True)
+        self.declare_parameter('self_color', 'red')
+
         self.use_fake_referee = self.get_parameter('use_fake_referee').get_parameter_value().bool_value
+        self.color = 1 if( self.get_parameter('self_color').get_parameter_value().string_value == 'red') else 0 #0 打红 1打蓝
         if self.use_fake_referee == True:
             self.get_logger().warning("Using fake referee, no referee data will be published")
         self.gimbal_msg = Gimbal()
@@ -69,12 +72,10 @@ class RNode(Node):
                         self.gimbal_msg.yaw = result[0]
                         self.gimbal_msg.roll  = result[1]
                         self.gimbal_msg.pitch= result[2]
-                        self.gimbal_msg.mode= 0 #0 打红 1打蓝
-                        # print(gimbal_msg,time.time())
+                        self.gimbal_msg.mode= self.color 
                     if referee_data != None and self.use_fake_referee == False:
                         self.publish_referee.publish(referee_data)
-                        # print(referee_data,time.time())
-                        # 发布消息                
+                        # 发布消息
                 except Exception as e:
                     print("Error:",str(e))
 
@@ -250,7 +251,7 @@ class RNode(Node):
 
 
 
-            #print(referee_data)
+            # print(referee_data)
         result = None
         if cmd_id == '14':
             result = []
